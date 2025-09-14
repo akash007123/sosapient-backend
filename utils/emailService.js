@@ -1,21 +1,37 @@
 const nodemailer = require("nodemailer");
 
 // Create reusable transporter
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: process.env.SMTP_SECURE === "true",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT) || 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+};
+
+const transporter = createTransporter();
 
 // Send contact form email
 const sendContactEmail = async (contactData) => {
+  // Check if email configuration is available
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    throw new Error('Email configuration is missing. Please set EMAIL_USER and EMAIL_PASS environment variables.');
+  }
+
+  console.log('Sending contact email with config:', {
+    host: process.env.EMAIL_HOST,
+    port: process.env.EMAIL_PORT,
+    user: process.env.EMAIL_USER,
+    adminEmail: process.env.ADMIN_EMAIL
+  });
+
   const mailOptions = {
-    from: process.env.SMTP_FROM,
-    to: process.env.ADMIN_EMAIL,
+    from: `"SoSapient Contact" <${process.env.EMAIL_USER}>`,
+    to: process.env.ADMIN_EMAIL || process.env.EMAIL_USER,
     subject: `New Contact Form Submission: ${contactData.subject}`,
     html: `
       <h2>New Contact Form Submission</h2>
@@ -31,11 +47,15 @@ const sendContactEmail = async (contactData) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    console.log('Attempting to send contact email...');
+    // Create fresh transporter for contact emails to avoid auth issues
+    const contactTransporter = createTransporter();
+    const result = await contactTransporter.sendMail(mailOptions);
+    console.log('Contact email sent successfully:', result.messageId);
     return true;
   } catch (error) {
     console.error("Error sending contact email:", error);
-    return false;
+    throw error;
   }
 };
 
@@ -125,7 +145,7 @@ const sendCareerEmail = async (career) => {
   try {
     // Send email to applicant
     await transporter.sendMail({
-      from: `"SosaPient" <${process.env.SMTP_USER}>`,
+      from: `"SosaPient" <${process.env.EMAIL_USER}>`,
       to: career.email,
       subject: "Thank you for your job application - SosaPient",
       html: getApplicantEmailTemplate(career),
@@ -133,8 +153,8 @@ const sendCareerEmail = async (career) => {
 
     // Send email to admin
     await transporter.sendMail({
-      from: `"SosaPient" <${process.env.SMTP_USER}>`,
-      to: process.env.ADMIN_EMAIL,
+      from: `"SosaPient" <${process.env.EMAIL_USER}>`,
+      to: process.env.ADMIN_EMAIL || process.env.EMAIL_USER,
       subject: "New Job Application Received",
       html: getAdminEmailTemplate(career),
     });

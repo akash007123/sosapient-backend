@@ -7,12 +7,21 @@ exports.createContact = async (req, res) => {
     const contact = new Contact(req.body);
     await contact.save();
 
-    // Send email notification
-    await sendContactEmail(contact);
+    // Try to send email notification (don't fail if email fails)
+    let emailSent = false;
+    try {
+      await sendContactEmail(contact);
+      emailSent = true;
+    } catch (emailError) {
+      console.error('Email notification failed:', emailError.message);
+      // Continue without failing the request
+    }
 
     res.status(201).json({
       success: true,
-      message: 'Contact form submitted successfully',
+      message: emailSent 
+        ? 'Contact form submitted successfully and email notification sent'
+        : 'Contact form submitted successfully (email notification failed)',
       data: contact
     });
   } catch (error) {

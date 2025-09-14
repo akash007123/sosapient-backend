@@ -198,18 +198,43 @@ const createBlog = async (req, res) => {
     
     // Parse author properly
     let parsedAuthor = author;
-    if (typeof author === 'string') {
-      try {
-        parsedAuthor = JSON.parse(author);
-      } catch (e) {
-        console.error('Error parsing author:', e);
-        parsedAuthor = {
-          name: 'Admin User',
-          email: 'admin@sosapient.com',
-          image: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
-        };
+    console.log('=== CREATE BLOG AUTHOR PROCESSING ===');
+    console.log('Raw author received:', author, 'Type:', typeof author);
+    
+    if (author !== undefined && author !== null) {
+      if (typeof author === 'string') {
+        try {
+          parsedAuthor = JSON.parse(author);
+          console.log('JSON parsed author:', parsedAuthor);
+        } catch (e) {
+          console.error('Error parsing author:', e);
+          // If it's a plain string, treat it as author name
+          parsedAuthor = {
+            name: author,
+            email: 'admin@sosapient.com',
+            image: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
+          };
+          console.log('Created author from string:', parsedAuthor);
+        }
+      } else if (typeof author === 'object') {
+        parsedAuthor = author;
+        console.log('Author already object:', parsedAuthor);
       }
+    } else {
+      console.log('Author is undefined/null, setting default');
+      parsedAuthor = {
+        name: 'Admin User',
+        email: 'admin@sosapient.com',
+        image: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
+      };
     }
+    
+    // Ensure author has required fields
+    if (!parsedAuthor.name) parsedAuthor.name = 'Admin User';
+    if (!parsedAuthor.email) parsedAuthor.email = 'admin@sosapient.com';
+    if (!parsedAuthor.image) parsedAuthor.image = 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1';
+    
+    console.log('Final parsed author:', parsedAuthor);
     
     let parsedSections = sections;
     if (typeof sections === 'string') {
@@ -287,6 +312,7 @@ const updateBlog = async (req, res) => {
     console.log('=== BACKEND UPDATE RECEIVED DATA ===');
     console.log('req.body.tags:', req.body.tags);
     console.log('req.body.seo:', req.body.seo);
+    console.log('req.body.author:', req.body.author);
 
     console.log('File uploaded:', req.file ? req.file.filename : 'No file');
     
@@ -311,16 +337,41 @@ const updateBlog = async (req, res) => {
     // Parse JSON strings if they exist with better error handling
     try {
       if (updateData.author && typeof updateData.author === 'string') {
-        console.log('Parsing author:', updateData.author);
-        updateData.author = JSON.parse(updateData.author);
+        console.log('=== UPDATE BLOG AUTHOR PROCESSING ===');
+        console.log('Raw author received:', updateData.author, 'Type:', typeof updateData.author);
+        
+        try {
+          updateData.author = JSON.parse(updateData.author);
+          console.log('JSON parsed author:', updateData.author);
+        } catch (parseError) {
+          console.log('JSON parse failed, treating as author name:', parseError.message);
+          // If it's a plain string, treat it as author name
+          updateData.author = {
+            name: updateData.author,
+            email: 'admin@sosapient.com',
+            image: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
+          };
+          console.log('Created author from string:', updateData.author);
+        }
+        
+        // Ensure author has required fields
+        if (typeof updateData.author === 'object') {
+          if (!updateData.author.name) updateData.author.name = 'Admin User';
+          if (!updateData.author.email) updateData.author.email = 'admin@sosapient.com';
+          if (!updateData.author.image) updateData.author.image = 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1';
+        }
+        
+        console.log('Final parsed author:', updateData.author);
       }
     } catch (error) {
-      console.error('Error parsing author:', error.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid author data format',
-        error: error.message
-      });
+      console.error('Error processing author:', error.message);
+      // Don't fail the entire update for author issues, just use default
+      updateData.author = {
+        name: 'Admin User',
+        email: 'admin@sosapient.com',
+        image: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
+      };
+      console.log('Using default author due to error');
     }
     
     try {

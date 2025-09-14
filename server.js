@@ -15,7 +15,8 @@ app.use(cors({
     'https://sosapient-test.netlify.app', // Production
     'https://sosapient.in',
     'https://staging.sosapient.com', // Staging
-    'https://sosapient-backend.onrender.com' // Backend domain (for self-requests)
+    'https://sosapient-backend.onrender.com', // Backend domain (for self-requests)
+    'sosapient-backend-mdhx-cy6ftta6r-akash-raikwars-projects.vercel.app'
   ],
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept'],

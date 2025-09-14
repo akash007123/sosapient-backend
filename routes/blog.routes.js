@@ -10,6 +10,7 @@ const {
   getFeaturedBlogs,
   likeBlog,
   getBlogStats,
+  fixPlaceholderImages,
   upload
 } = require('../controllers/blog.controller');
 
@@ -25,5 +26,6 @@ router.post('/:id/like', likeBlog);
 router.post('/', upload.single('image'), createBlog);
 router.put('/:id', upload.single('image'), updateBlog);
 router.delete('/:id', deleteBlog);
+router.post('/fix-placeholders', fixPlaceholderImages);
 
 module.exports = router;

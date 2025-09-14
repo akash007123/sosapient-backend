@@ -211,7 +211,7 @@ const createBlog = async (req, res) => {
       excerpt,
       content,
       sections: parsedSections,
-      image: imageUrl || 'https://via.placeholder.com/800x400?text=Blog+Image',
+      image: imageUrl || 'https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=800&h=400&fit=crop&crop=center',
       category,
       tags: parsedTags,
       author: parsedAuthor,
@@ -240,7 +240,23 @@ const createBlog = async (req, res) => {
 // Update blog post
 const updateBlog = async (req, res) => {
   try {
+    console.log('=== UPDATE BLOG REQUEST ===');
+    console.log('Blog ID:', req.params.id);
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Request body:', req.body);
+    console.log('File uploaded:', req.file ? req.file.filename : 'No file');
+    
     const { id } = req.params;
+    
+    // Validate blog ID format
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      console.log('Invalid blog ID format:', id);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid blog ID format'
+      });
+    }
+    
     const updateData = { ...req.body };
     
     // Handle image upload
@@ -248,26 +264,111 @@ const updateBlog = async (req, res) => {
       updateData.image = `/uploads/blog-images/${req.file.filename}`;
     }
     
-    // Parse JSON strings if they exist
-    if (updateData.author && typeof updateData.author === 'string') {
-      updateData.author = JSON.parse(updateData.author);
+    // Parse JSON strings if they exist with better error handling
+    try {
+      if (updateData.author && typeof updateData.author === 'string') {
+        console.log('Parsing author:', updateData.author);
+        updateData.author = JSON.parse(updateData.author);
+      }
+    } catch (error) {
+      console.error('Error parsing author:', error.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid author data format',
+        error: error.message
+      });
     }
     
-    if (updateData.seo && typeof updateData.seo === 'string') {
-      updateData.seo = JSON.parse(updateData.seo);
+    try {
+      if (updateData.seo && typeof updateData.seo === 'string') {
+        console.log('Parsing SEO:', updateData.seo);
+        // Check if it's already a valid JSON string or if it's "[object Object]"
+        if (updateData.seo === '[object Object]' || updateData.seo.startsWith('[object')) {
+          console.log('Skipping invalid SEO object string');
+          delete updateData.seo;
+        } else {
+          updateData.seo = JSON.parse(updateData.seo);
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing SEO:', error.message);
+      console.log('Skipping invalid SEO data and continuing...');
+      delete updateData.seo; // Remove invalid SEO data instead of failing
     }
     
+    // Handle tags parsing
     if (updateData.tags && typeof updateData.tags === 'string') {
-      updateData.tags = updateData.tags.split(',').map(tag => tag.trim());
-    }
-
-    if (updateData.sections && typeof updateData.sections === 'string') {
       try {
-        updateData.sections = JSON.parse(updateData.sections);
+        console.log('Parsing tags:', updateData.tags);
+        updateData.tags = JSON.parse(updateData.tags);
       } catch {
-        updateData.sections = [];
+        // Fallback to comma-separated parsing
+        updateData.tags = updateData.tags.split(',').map(tag => tag.trim());
       }
     }
+
+    // Handle sections parsing
+    if (updateData.sections && typeof updateData.sections === 'string') {
+      try {
+        console.log('Parsing sections:', updateData.sections);
+        updateData.sections = JSON.parse(updateData.sections);
+      } catch (error) {
+        console.error('Error parsing sections:', error.message);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid sections data format',
+          error: error.message
+        });
+      }
+    }
+    
+    // Handle boolean fields
+    if (updateData.featured !== undefined) {
+      updateData.featured = updateData.featured === 'true' || updateData.featured === true;
+    }
+    
+    // Handle slug generation if title is being updated
+    if (updateData.title) {
+      // Get current blog to check if title actually changed
+      const currentBlog = await Blog.findById(id).select('title slug');
+      
+      if (!currentBlog) {
+        return res.status(404).json({
+          success: false,
+          message: 'Blog post not found'
+        });
+      }
+      
+      // Only regenerate slug if title actually changed
+      if (currentBlog.title !== updateData.title) {
+        let baseSlug = updateData.title
+          .toLowerCase()
+          .replace(/[^a-zA-Z0-9\s]/g, '')
+          .replace(/\s+/g, '-')
+          .trim();
+        
+        let slug = baseSlug;
+        let counter = 1;
+        
+        // Check for existing slug and make it unique (exclude current blog)
+        while (await Blog.findOne({ slug, _id: { $ne: id } })) {
+          slug = `${baseSlug}-${counter}`;
+          counter++;
+        }
+        
+        updateData.slug = slug;
+        console.log('Generated new slug:', slug);
+      }
+    }
+    
+    // Remove undefined fields to avoid validation issues
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined || updateData[key] === null || updateData[key] === '') {
+        delete updateData[key];
+      }
+    });
+    
+    console.log('Final update data:', updateData);
     
     const blog = await Blog.findByIdAndUpdate(id, updateData, {
       new: true,
@@ -275,18 +376,43 @@ const updateBlog = async (req, res) => {
     });
     
     if (!blog) {
+      console.log('Blog not found with ID:', id);
       return res.status(404).json({
         success: false,
         message: 'Blog post not found'
       });
     }
     
+    console.log('Blog updated successfully:', blog._id);
     res.json({
       success: true,
       message: 'Blog post updated successfully',
       data: blog
     });
   } catch (error) {
+    console.error('Error updating blog post:', error);
+    console.error('Error stack:', error.stack);
+    
+    // Check for validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: validationErrors,
+        error: error.message
+      });
+    }
+    
+    // Check for cast errors (invalid ObjectId)
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid blog ID',
+        error: error.message
+      });
+    }
+    
     res.status(400).json({
       success: false,
       message: 'Error updating blog post',
@@ -430,6 +556,58 @@ const getBlogStats = async (req, res) => {
   }
 };
 
+// Fix placeholder images in existing blogs
+const fixPlaceholderImages = async (req, res) => {
+  try {
+    console.log('Starting placeholder image fix...');
+    
+    // Find blogs with via.placeholder.com images
+    const blogsWithPlaceholders = await Blog.find({
+      $or: [
+        { image: { $regex: 'via.placeholder.com', $options: 'i' } },
+        { 'author.image': { $regex: 'via.placeholder.com', $options: 'i' } }
+      ]
+    });
+    
+    console.log(`Found ${blogsWithPlaceholders.length} blogs with placeholder images`);
+    
+    let updatedCount = 0;
+    
+    for (const blog of blogsWithPlaceholders) {
+      const updates = {};
+      
+      // Fix main image
+      if (blog.image && blog.image.includes('via.placeholder.com')) {
+        updates.image = 'https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=800&h=400&fit=crop&crop=center';
+      }
+      
+      // Fix author image
+      if (blog.author?.image && blog.author.image.includes('via.placeholder.com')) {
+        updates['author.image'] = 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face';
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await Blog.findByIdAndUpdate(blog._id, updates);
+        updatedCount++;
+        console.log(`Updated blog: ${blog.title}`);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Fixed ${updatedCount} blogs with placeholder images`,
+      data: { updatedCount, totalFound: blogsWithPlaceholders.length }
+    });
+  } catch (error) {
+    console.error('Error fixing placeholder images:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fixing placeholder images',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getAllBlogs,
   getBlogBySlug,
@@ -440,5 +618,6 @@ module.exports = {
   getFeaturedBlogs,
   likeBlog,
   getBlogStats,
+  fixPlaceholderImages,
   upload
 };

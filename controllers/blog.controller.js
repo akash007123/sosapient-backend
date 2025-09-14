@@ -169,17 +169,32 @@ const createBlog = async (req, res) => {
     
     // Parse tags properly
     let parsedTags = [];
-    if (tags) {
+    console.log('=== CREATE BLOG TAGS PROCESSING ===');
+    console.log('Raw tags received:', tags, 'Type:', typeof tags);
+    
+    if (tags !== undefined && tags !== null) {
       if (typeof tags === 'string') {
         try {
           parsedTags = JSON.parse(tags);
-        } catch {
-          parsedTags = tags.split(',').map(tag => tag.trim());
+          console.log('JSON parsed tags:', parsedTags);
+        } catch (error) {
+          console.log('JSON parse failed, trying comma-separated:', error.message);
+          parsedTags = tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+          console.log('Comma-separated tags:', parsedTags);
         }
       } else if (Array.isArray(tags)) {
         parsedTags = tags;
+        console.log('Tags already array:', parsedTags);
+      } else {
+        console.log('Tags not string or array, setting empty array');
+        parsedTags = [];
       }
+    } else {
+      console.log('Tags is undefined/null, setting empty array');
+      parsedTags = [];
     }
+    
+    console.log('Final parsed tags:', parsedTags);
     
     // Parse author properly
     let parsedAuthor = author;
@@ -205,6 +220,31 @@ const createBlog = async (req, res) => {
       }
     }
     
+    // Parse SEO properly
+    let parsedSeo = seo || { metaTitle: '', metaDescription: '', keywords: [] };
+    console.log('=== CREATE BLOG SEO PROCESSING ===');
+    console.log('Raw seo received:', seo, 'Type:', typeof seo);
+    
+    if (seo !== undefined && seo !== null) {
+      if (typeof seo === 'string') {
+        try {
+          parsedSeo = JSON.parse(seo);
+          console.log('JSON parsed seo:', parsedSeo);
+        } catch (error) {
+          console.log('SEO JSON parse failed:', error.message);
+          parsedSeo = { metaTitle: '', metaDescription: '', keywords: [] };
+        }
+      } else if (typeof seo === 'object') {
+        parsedSeo = seo;
+        console.log('SEO already object:', parsedSeo);
+      }
+    } else {
+      console.log('SEO is undefined/null, setting default');
+      parsedSeo = { metaTitle: '', metaDescription: '', keywords: [] };
+    }
+    
+    console.log('Final parsed seo:', parsedSeo);
+    
     const blog = new Blog({
       title,
       slug,
@@ -217,7 +257,7 @@ const createBlog = async (req, res) => {
       author: parsedAuthor,
       status,
       featured: featured === 'true' || featured === true,
-      seo: typeof seo === 'string' ? JSON.parse(seo) : seo
+      seo: parsedSeo
     });
     
     await blog.save();
@@ -243,7 +283,11 @@ const updateBlog = async (req, res) => {
     console.log('=== UPDATE BLOG REQUEST ===');
     console.log('Blog ID:', req.params.id);
     console.log('Request body keys:', Object.keys(req.body));
-    console.log('Request body:', req.body);
+    console.log('Request files:', req.files);
+    console.log('=== BACKEND UPDATE RECEIVED DATA ===');
+    console.log('req.body.tags:', req.body.tags);
+    console.log('req.body.seo:', req.body.seo);
+
     console.log('File uploaded:', req.file ? req.file.filename : 'No file');
     
     const { id } = req.params;
@@ -297,14 +341,26 @@ const updateBlog = async (req, res) => {
     }
     
     // Handle tags parsing
-    if (updateData.tags && typeof updateData.tags === 'string') {
-      try {
-        console.log('Parsing tags:', updateData.tags);
-        updateData.tags = JSON.parse(updateData.tags);
-      } catch {
-        // Fallback to comma-separated parsing
-        updateData.tags = updateData.tags.split(',').map(tag => tag.trim());
+    if (updateData.tags !== undefined) {
+      if (typeof updateData.tags === 'string') {
+        try {
+          console.log('Parsing tags string:', updateData.tags);
+          updateData.tags = JSON.parse(updateData.tags);
+          console.log('Parsed tags result:', updateData.tags);
+        } catch (error) {
+          console.log('JSON parse failed, trying comma-separated:', error.message);
+          // Fallback to comma-separated parsing
+          updateData.tags = updateData.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+          console.log('Comma-separated tags result:', updateData.tags);
+        }
+      } else if (Array.isArray(updateData.tags)) {
+        console.log('Tags already an array:', updateData.tags);
+      } else {
+        console.log('Tags is not string or array, setting to empty array:', typeof updateData.tags);
+        updateData.tags = [];
       }
+    } else {
+      console.log('No tags field in updateData');
     }
 
     // Handle sections parsing
@@ -361,8 +417,12 @@ const updateBlog = async (req, res) => {
       }
     }
     
-    // Remove undefined fields to avoid validation issues
+    // Remove undefined fields to avoid validation issues, but preserve tags and seo even if empty
     Object.keys(updateData).forEach(key => {
+      if (key === 'tags' || key === 'seo') {
+        // Keep tags and seo fields even if empty
+        return;
+      }
       if (updateData[key] === undefined || updateData[key] === null || updateData[key] === '') {
         delete updateData[key];
       }

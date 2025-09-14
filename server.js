@@ -14,7 +14,7 @@ app.use(cors({
     'http://localhost:3000', // Alternative development port
     'https://sosapient-test.netlify.app', // Production
     'https://sosapient.in',
-    'https://staging.your-domain.com' // Staging
+    'https://staging.sosapient.com' // Staging
   ],
   methods: ['GET', 'POST', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']

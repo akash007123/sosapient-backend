@@ -14,10 +14,12 @@ app.use(cors({
     'http://localhost:3000', // Alternative development port
     'https://sosapient-test.netlify.app', // Production
     'https://sosapient.in',
-    'https://staging.sosapient.com' // Staging
+    'https://staging.sosapient.com', // Staging
+    'https://sosapient-backend.onrender.com' // Backend domain (for self-requests)
   ],
-  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept'],
+  credentials: true
 }));
 
 // Request logging middleware
@@ -41,6 +43,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const contactRoutes = require('./routes/contact.routes');
 const careerRoutes = require('./routes/career.routes');
 const blogRoutes = require('./routes/blog.routes');
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Use routes
 app.use('/api/contact', contactRoutes);

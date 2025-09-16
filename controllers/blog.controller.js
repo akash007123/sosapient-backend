@@ -2,6 +2,30 @@ const Blog = require('../models/blog.model');
 const multer = require('multer');
 const path = require('path');
 
+// Helper to normalize any input into an array of trimmed strings
+function normalizeStringArray(input) {
+  if (!input) return [];
+  let arr = [];
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (Array.isArray(parsed)) arr = parsed;
+      else arr = String(input).split(',');
+    } catch {
+      arr = String(input).split(',');
+    }
+  } else if (Array.isArray(input)) {
+    arr = input;
+  } else if (typeof input === 'object') {
+    // Convert object values to array if needed
+    arr = Object.values(input);
+  }
+  return arr
+    .map(v => (v == null ? '' : String(v)))
+    .map(v => v.trim())
+    .filter(v => v.length > 0);
+}
+
 // Configure multer for image uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -168,32 +192,11 @@ const createBlog = async (req, res) => {
     }
     
     // Parse tags properly
-    let parsedTags = [];
-    console.log('=== CREATE BLOG TAGS PROCESSING ===');
-    console.log('Raw tags received:', tags, 'Type:', typeof tags);
-    
-    if (tags !== undefined && tags !== null) {
-      if (typeof tags === 'string') {
-        try {
-          parsedTags = JSON.parse(tags);
-          console.log('JSON parsed tags:', parsedTags);
-        } catch (error) {
-          console.log('JSON parse failed, trying comma-separated:', error.message);
-          parsedTags = tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
-          console.log('Comma-separated tags:', parsedTags);
-        }
-      } else if (Array.isArray(tags)) {
-        parsedTags = tags;
-        console.log('Tags already array:', parsedTags);
-      } else {
-        console.log('Tags not string or array, setting empty array');
-        parsedTags = [];
-      }
-    } else {
-      console.log('Tags is undefined/null, setting empty array');
-      parsedTags = [];
+    let parsedTags = normalizeStringArray(tags);
+    // CSV fallback if tags couldn't be parsed from main field
+    if (parsedTags.length === 0 && typeof req.body.tagsCsv === 'string') {
+      parsedTags = normalizeStringArray(req.body.tagsCsv);
     }
-    
     console.log('Final parsed tags:', parsedTags);
     
     // Parse author properly
@@ -267,8 +270,13 @@ const createBlog = async (req, res) => {
       console.log('SEO is undefined/null, setting default');
       parsedSeo = { metaTitle: '', metaDescription: '', keywords: [] };
     }
-    
-    console.log('Final parsed seo:', parsedSeo);
+
+    // Normalize SEO keywords array
+    parsedSeo.keywords = normalizeStringArray(parsedSeo.keywords);
+    // CSV fallback for SEO keywords
+    if ((!Array.isArray(parsedSeo.keywords) || parsedSeo.keywords.length === 0) && typeof req.body.seoKeywordsCsv === 'string') {
+      parsedSeo.keywords = normalizeStringArray(req.body.seoKeywordsCsv);
+    }
     
     const blog = new Blog({
       title,
@@ -390,25 +398,20 @@ const updateBlog = async (req, res) => {
       console.log('Skipping invalid SEO data and continuing...');
       delete updateData.seo; // Remove invalid SEO data instead of failing
     }
+
+    // Normalize SEO keywords if present
+    if (updateData.seo && typeof updateData.seo === 'object') {
+      updateData.seo.keywords = normalizeStringArray(updateData.seo.keywords);
+      if ((!Array.isArray(updateData.seo.keywords) || updateData.seo.keywords.length === 0) && typeof updateData.seoKeywordsCsv === 'string') {
+        updateData.seo.keywords = normalizeStringArray(updateData.seoKeywordsCsv);
+      }
+    }
     
     // Handle tags parsing
     if (updateData.tags !== undefined) {
-      if (typeof updateData.tags === 'string') {
-        try {
-          console.log('Parsing tags string:', updateData.tags);
-          updateData.tags = JSON.parse(updateData.tags);
-          console.log('Parsed tags result:', updateData.tags);
-        } catch (error) {
-          console.log('JSON parse failed, trying comma-separated:', error.message);
-          // Fallback to comma-separated parsing
-          updateData.tags = updateData.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
-          console.log('Comma-separated tags result:', updateData.tags);
-        }
-      } else if (Array.isArray(updateData.tags)) {
-        console.log('Tags already an array:', updateData.tags);
-      } else {
-        console.log('Tags is not string or array, setting to empty array:', typeof updateData.tags);
-        updateData.tags = [];
+      updateData.tags = normalizeStringArray(updateData.tags);
+      if (updateData.tags.length === 0 && typeof updateData.tagsCsv === 'string') {
+        updateData.tags = normalizeStringArray(updateData.tagsCsv);
       }
     } else {
       console.log('No tags field in updateData');

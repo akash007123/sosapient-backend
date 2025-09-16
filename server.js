@@ -17,27 +17,36 @@ app.use(cors({
     'https://staging.sosapient.com', // Staging
     'https://sosapient-backend.onrender.com' // Backend domain (for self-requests)
   ],
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept'],
   credentials: true
 }));
-
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  console.log('Request headers:', req.headers);
-  if (req.method === 'POST') {
-    console.log('Request body:', req.body);
-  }
-  next();
-});
 
 // Body parser middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files for uploaded images
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Request logging middleware (after body parsing to log body content)
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  console.log('Request headers:', req.headers);
+  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+    console.log('Request body:', req.body);
+  }
+  next();
+});
+
+// Serve static files for uploaded images (ensure directory exists)
+const fs = require('fs');
+const uploadsDir = path.join(__dirname, 'uploads');
+const blogImagesDir = path.join(uploadsDir, 'blog-images');
+try {
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+  if (!fs.existsSync(blogImagesDir)) fs.mkdirSync(blogImagesDir);
+} catch (e) {
+  console.warn('Warning: could not ensure uploads directories exist:', e.message);
+}
+app.use('/uploads', express.static(uploadsDir));
 
 // Import routes
 const contactRoutes = require('./routes/contact.routes');

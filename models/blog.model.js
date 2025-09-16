@@ -58,8 +58,9 @@ const blogSchema = new mongoose.Schema({
     type: String,
     default: function() {
       // Calculate read time based on content length (average 200 words per minute)
-      const wordCount = this.content.split(' ').length;
-      const minutes = Math.ceil(wordCount / 200);
+      const contentText = typeof this.content === 'string' ? this.content : '';
+      const wordCount = contentText.trim().length > 0 ? contentText.split(/\s+/).length : 0;
+      const minutes = Math.max(1, Math.ceil(wordCount / 200));
       return `${minutes} min read`;
     }
   },

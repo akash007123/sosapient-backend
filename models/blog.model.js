@@ -88,7 +88,16 @@ const blogSchema = new mongoose.Schema({
     metaTitle: String,
     metaDescription: String,
     keywords: [String]
-  }
+  },
+  comments: [
+    {
+      name: { type: String, required: true, trim: true, maxlength: 100 },
+      email: { type: String, required: true, trim: true, lowercase: true },
+      comment: { type: String, required: true, maxlength: 2000 },
+      approved: { type: Boolean, default: true },
+      createdAt: { type: Date, default: Date.now, immutable: true }
+    }
+  ]
 }, {
   timestamps: true
 });

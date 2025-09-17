@@ -562,6 +562,71 @@ const deleteBlog = async (req, res) => {
   }
 };
 
+// Get comments for a blog by slug (only approved comments)
+const getCommentsBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    if (!slug) {
+      return res.status(400).json({ success: false, message: 'Missing blog slug' });
+    }
+
+    const blog = await Blog.findOne({ slug, status: 'published' }).select('comments');
+    if (!blog) {
+      return res.status(404).json({ success: false, message: 'Blog post not found' });
+    }
+
+    // Return approved comments sorted by createdAt desc
+    const comments = (blog.comments || [])
+      .filter(c => c.approved !== false)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({ success: true, data: comments });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching comments', error: error.message });
+  }
+};
+
+// Add a new comment by blog ID
+const addCommentById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, comment } = req.body || {};
+
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid blog ID' });
+    }
+    if (!name || !email || !comment) {
+      return res.status(400).json({ success: false, message: 'Name, email and comment are required' });
+    }
+    const emailOk = /.+@.+\..+/.test(String(email));
+    if (!emailOk) {
+      return res.status(400).json({ success: false, message: 'Invalid email address' });
+    }
+
+    const newComment = {
+      name: String(name).trim(),
+      email: String(email).trim().toLowerCase(),
+      comment: String(comment).trim(),
+      approved: true,
+      createdAt: new Date()
+    };
+
+    const blog = await Blog.findByIdAndUpdate(
+      id,
+      { $push: { comments: newComment } },
+      { new: true, select: 'comments' }
+    );
+
+    if (!blog) {
+      return res.status(404).json({ success: false, message: 'Blog post not found' });
+    }
+
+    res.status(201).json({ success: true, message: 'Comment added', data: newComment });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error adding comment', error: error.message });
+  }
+};
+
 // Get blog categories
 const getCategories = async (req, res) => {
   try {
@@ -733,5 +798,7 @@ module.exports = {
   likeBlog,
   getBlogStats,
   fixPlaceholderImages,
-  upload
+  upload,
+  getCommentsBySlug,
+  addCommentById
 };

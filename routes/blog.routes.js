@@ -11,7 +11,9 @@ const {
   likeBlog,
   getBlogStats,
   fixPlaceholderImages,
-  upload
+  upload,
+  getCommentsBySlug,
+  addCommentById
 } = require('../controllers/blog.controller');
 
 // Public routes
@@ -19,8 +21,10 @@ router.get('/', getAllBlogs);
 router.get('/categories', getCategories);
 router.get('/featured', getFeaturedBlogs);
 router.get('/stats', getBlogStats);
-router.get('/:slug', getBlogBySlug);
 router.post('/:id/like', likeBlog);
+router.get('/:slug/comments', getCommentsBySlug);
+router.post('/:id/comments', addCommentById);
+router.get('/:slug', getBlogBySlug);
 
 // Admin routes (you can add authentication middleware here)
 router.post('/', upload.single('image'), createBlog);

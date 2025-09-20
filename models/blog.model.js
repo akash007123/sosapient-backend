@@ -95,12 +95,14 @@ const blogSchema = new mongoose.Schema({
       email: { type: String, required: true, trim: true, lowercase: true },
       comment: { type: String, required: true, maxlength: 5000 }, // Increased from 2000 to 5000 characters
       avatar: { type: String },
+      userId: { type: String }, // Add userId to track comment ownership
       likeCount: { type: Number, default: 0 },
       dislikeCount: { type: Number, default: 0 },
       likedBy: [{ type: String }],
       dislikedBy: [{ type: String }],
       approved: { type: Boolean, default: true },
-      createdAt: { type: Date, default: Date.now, immutable: true }
+      createdAt: { type: Date, default: Date.now, immutable: true },
+      updatedAt: { type: Date } // Add updatedAt for tracking edits
     }
   ]
 }, {

@@ -14,6 +14,8 @@ const {
   upload,
   getCommentsBySlug,
   addCommentById,
+  editCommentById,
+  deleteCommentById,
   commentAvatarUpload,
   voteOnComment,
   likeComment,
@@ -28,6 +30,8 @@ router.get('/stats', getBlogStats);
 router.post('/:id/like', likeBlog);
 router.get('/:slug/comments', getCommentsBySlug);
 router.post('/:id/comments', commentAvatarUpload.single('avatar'), addCommentById);
+router.put('/:blogId/comments/:commentId', editCommentById);
+router.delete('/:blogId/comments/:commentId', deleteCommentById);
 router.post('/:blogId/comments/:commentId/vote', voteOnComment);
 router.post('/:blogId/comments/:commentId/like', likeComment);
 router.post('/:blogId/comments/:commentId/test-like', testLikeComment);

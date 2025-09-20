@@ -994,6 +994,7 @@ const addCommentById = async (req, res) => {
       name: String(name).trim(),
       email: String(email).trim().toLowerCase(),
       comment: String(comment).trim(),
+      userId: req.body.userId || null, // Add userId for ownership tracking
       approved: true,
       createdAt: new Date()
     };
@@ -1016,6 +1017,147 @@ const addCommentById = async (req, res) => {
     res.status(201).json({ success: true, message: 'Comment added', data: newComment });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error adding comment', error: error.message });
+  }
+};
+
+// Edit a comment by comment ID
+const editCommentById = async (req, res) => {
+  try {
+    const { blogId, commentId } = req.params;
+    const { comment, userId } = req.body;
+
+    // Validate required fields
+    if (!blogId || !mongoose.Types.ObjectId.isValid(blogId)) {
+      return res.status(400).json({ success: false, message: 'Invalid blog ID format' });
+    }
+    if (!commentId || !mongoose.Types.ObjectId.isValid(commentId)) {
+      return res.status(400).json({ success: false, message: 'Invalid comment ID format' });
+    }
+    if (!comment || !comment.trim()) {
+      return res.status(400).json({ success: false, message: 'Comment content is required' });
+    }
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
+
+    // Validate comment length
+    if (comment.trim().length > 5000) {
+      return res.status(400).json({ success: false, message: 'Comment cannot exceed 5000 characters' });
+    }
+
+    // Find the blog and verify comment ownership
+    const blog = await Blog.findOne({
+      _id: blogId,
+      'comments._id': commentId,
+      'comments.userId': userId // Only allow editing own comments
+    });
+
+    if (!blog) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Comment not found or you do not have permission to edit this comment' 
+      });
+    }
+
+    // Update the comment
+    const updatedBlog = await Blog.findOneAndUpdate(
+      {
+        _id: blogId,
+        'comments._id': commentId,
+        'comments.userId': userId
+      },
+      {
+        $set: {
+          'comments.$.comment': comment.trim(),
+          'comments.$.updatedAt': new Date()
+        }
+      },
+      { new: true, select: 'comments' }
+    );
+
+    if (!updatedBlog) {
+      return res.status(404).json({ success: false, message: 'Failed to update comment' });
+    }
+
+    // Find the updated comment
+    const updatedComment = updatedBlog.comments.find(c => c._id.toString() === commentId);
+    
+    res.json({ 
+      success: true, 
+      message: 'Comment updated successfully', 
+      data: updatedComment 
+    });
+  } catch (error) {
+    console.error('Error editing comment:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error editing comment', 
+      error: error.message 
+    });
+  }
+};
+
+// Delete a comment by comment ID
+const deleteCommentById = async (req, res) => {
+  try {
+    const { blogId, commentId } = req.params;
+    const { userId } = req.body;
+
+    // Validate required fields
+    if (!blogId || !mongoose.Types.ObjectId.isValid(blogId)) {
+      return res.status(400).json({ success: false, message: 'Invalid blog ID format' });
+    }
+    if (!commentId || !mongoose.Types.ObjectId.isValid(commentId)) {
+      return res.status(400).json({ success: false, message: 'Invalid comment ID format' });
+    }
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
+
+    // Find the blog and verify comment ownership
+    const blog = await Blog.findOne({
+      _id: blogId,
+      'comments._id': commentId,
+      'comments.userId': userId // Only allow deleting own comments
+    });
+
+    if (!blog) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Comment not found or you do not have permission to delete this comment' 
+      });
+    }
+
+    // Remove the comment
+    const updatedBlog = await Blog.findOneAndUpdate(
+      {
+        _id: blogId,
+        'comments._id': commentId,
+        'comments.userId': userId
+      },
+      {
+        $pull: {
+          comments: { _id: commentId, userId: userId }
+        }
+      },
+      { new: true }
+    );
+
+    if (!updatedBlog) {
+      return res.status(404).json({ success: false, message: 'Failed to delete comment' });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Comment deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error deleting comment', 
+      error: error.message 
+    });
   }
 };
 
@@ -1194,6 +1336,8 @@ module.exports = {
   commentAvatarUpload,
   getCommentsBySlug,
   addCommentById,
+  editCommentById,
+  deleteCommentById,
   voteOnComment,
   likeComment,
   testLikeComment

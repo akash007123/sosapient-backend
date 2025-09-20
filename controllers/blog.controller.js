@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Blog = require('../models/blog.model');
 const multer = require('multer');
 const path = require('path');
@@ -56,6 +57,31 @@ const upload = multer({
   }
 });
 
+// Configure multer for comment avatar uploads
+const commentAvatarStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/comment-avatars/');
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'avatar-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const commentAvatarUpload = multer({
+  storage: commentAvatarStorage,
+  limits: {
+    fileSize: 3 * 1024 * 1024 // 3MB for avatar
+  },
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (mimetype && extname) return cb(null, true);
+    cb(new Error('Only image files are allowed'));
+  }
+});
+
 // Get all published blogs with pagination and filtering
 const getAllBlogs = async (req, res) => {
   try {
@@ -110,6 +136,340 @@ const getAllBlogs = async (req, res) => {
       message: 'Error fetching blogs',
       error: error.message
     });
+  }
+};
+
+// Test endpoint to verify comment like functionality
+const testLikeComment = async (req, res) => {
+  try {
+    console.log('=== TEST LIKE COMMENT ENDPOINT ===');
+    console.log('Request params:', req.params);
+    console.log('Request body:', req.body);
+    
+    const { blogId, commentId } = req.params;
+    const { userId } = req.body || {};
+    
+    // Basic validation
+    if (!mongoose.Types.ObjectId.isValid(blogId)) {
+      return res.status(400).json({ success: false, message: 'Invalid blog ID' });
+    }
+    
+    if (!mongoose.Types.ObjectId.isValid(commentId)) {
+      return res.status(400).json({ success: false, message: 'Invalid comment ID' });
+    }
+    
+    // Find the blog and comment
+    const blog = await Blog.findById(blogId);
+    if (!blog) {
+      return res.status(404).json({ success: false, message: 'Blog not found' });
+    }
+    
+    const comment = blog.comments.find(c => c._id.toString() === commentId);
+    if (!comment) {
+      return res.status(404).json({ success: false, message: 'Comment not found' });
+    }
+    
+    console.log('Found comment:', {
+      _id: comment._id,
+      likeCount: comment.likeCount,
+      likedBy: comment.likedBy
+    });
+    
+    return res.json({
+      success: true,
+      message: 'Test successful',
+      data: {
+        blog: { _id: blog._id, title: blog.title },
+        comment: {
+          _id: comment._id,
+          likeCount: comment.likeCount || 0,
+          likedBy: comment.likedBy || [],
+          hasLiked: (comment.likedBy || []).includes(userId)
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Test endpoint error',
+      error: error.message
+    });
+  }
+};
+
+// Like/Unlike a specific comment - Simple toggle system
+const likeComment = async (req, res) => {
+  try {
+    const { blogId, commentId } = req.params;
+    const { userId } = req.body || {};
+
+    console.log('=== LIKE COMMENT REQUEST ===');
+    console.log('Blog ID:', blogId);
+    console.log('Comment ID:', commentId);
+    console.log('User ID:', userId);
+
+    // Validate required parameters with proper MongoDB ObjectId validation
+    if (!blogId || !mongoose.Types.ObjectId.isValid(blogId)) {
+      console.log('Invalid blog ID format');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid blog ID format' 
+      });
+    }
+    if (!commentId || !mongoose.Types.ObjectId.isValid(commentId)) {
+      console.log('Invalid comment ID format');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid comment ID format' 
+      });
+    }
+    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
+      console.log('User ID is required');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'User ID is required' 
+      });
+    }
+
+    // Create ObjectIds for proper comparison
+    const blogObjectId = new mongoose.Types.ObjectId(blogId);
+    const commentObjectId = new mongoose.Types.ObjectId(commentId);
+
+    // Find the blog with the specific comment
+    console.log('Finding blog and comment...');
+    const blog = await Blog.findOne({
+      _id: blogObjectId,
+      'comments._id': commentObjectId
+    });
+
+    if (!blog) {
+      console.log('Blog or comment not found');
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Blog or comment not found' 
+      });
+    }
+
+    // Find the specific comment in the blog
+    const comment = blog.comments.find(c => c._id.toString() === commentId);
+    if (!comment) {
+      console.log('Comment not found in blog');
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Comment not found in this blog post' 
+      });
+    }
+
+    console.log('Current comment state:', {
+      likeCount: comment.likeCount || 0,
+      likedBy: comment.likedBy || []
+    });
+
+    // Check if user has already liked this comment
+    const hasLiked = Array.isArray(comment.likedBy) && comment.likedBy.includes(userId);
+    console.log('User has already liked:', hasLiked);
+
+    let updateOperation;
+    let message;
+    
+    if (hasLiked) {
+      // Remove like
+      updateOperation = {
+        $pull: { 'comments.$.likedBy': userId },
+        $inc: { 'comments.$.likeCount': -1 }
+      };
+      message = 'Comment unliked successfully';
+    } else {
+      // Add like
+      updateOperation = {
+        $addToSet: { 'comments.$.likedBy': userId },
+        $inc: { 'comments.$.likeCount': 1 }
+      };
+      message = 'Comment liked successfully';
+    }
+
+    console.log('Update operation:', updateOperation);
+
+    // Perform the update
+    const updatedBlog = await Blog.findOneAndUpdate(
+      {
+        _id: blogObjectId,
+        'comments._id': commentObjectId
+      },
+      updateOperation,
+      { 
+        new: true,
+        select: 'comments'
+      }
+    );
+
+    if (!updatedBlog) {
+      console.log('Failed to update blog');
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Failed to update comment' 
+      });
+    }
+
+    // Find the updated comment
+    const updatedComment = updatedBlog.comments.find(c => c._id.toString() === commentId);
+    if (!updatedComment) {
+      console.log('Updated comment not found');
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Updated comment not found' 
+      });
+    }
+
+    console.log('Updated comment state:', {
+      likeCount: updatedComment.likeCount || 0,
+      likedBy: updatedComment.likedBy || []
+    });
+    
+    return res.status(200).json({
+      success: true,
+      message,
+      data: {
+        commentId: commentId,
+        likeCount: Math.max(0, updatedComment.likeCount || 0),
+        isLiked: !hasLiked,
+        likedBy: updatedComment.likedBy || []
+      }
+    });
+
+  } catch (error) {
+    console.error('=== ERROR IN LIKE COMMENT ===');
+    console.error('Error details:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    // Handle specific MongoDB errors
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid ID format provided',
+        error: 'Invalid ObjectId'
+      });
+    }
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        error: error.message
+      });
+    }
+
+    if (error.name === 'MongoServerError' || error.name === 'MongoError') {
+      return res.status(500).json({
+        success: false,
+        message: 'Database operation failed',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Database error'
+      });
+    }
+
+    // Generic server error for unexpected issues
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error while updating comment like',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Contact support if this persists'
+    });
+  }
+};
+
+// Vote on a specific comment (like/dislike) identified by its subdocument _id
+// Body expects an 'action' field: 'like' | 'unlike' | 'dislike' | 'undislike' | 'switchToLike' | 'switchToDislike'
+const voteOnComment = async (req, res) => {
+  try {
+    const { blogId, commentId } = req.params;
+    const { action, voterId } = req.body || {};
+
+    if (!blogId || !blogId.match(/^[0-9a-fA-F]{24}$/) || !commentId || !commentId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid blog or comment ID' });
+    }
+    if (!voterId || typeof voterId !== 'string' || voterId.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Missing voterId' });
+    }
+
+    // Load current comment to determine membership and compute idempotent deltas
+    const holder = await Blog.findOne({ _id: blogId, 'comments._id': commentId }, { 'comments.$': 1 }).lean();
+    if (!holder || !holder.comments || holder.comments.length === 0) {
+      return res.status(404).json({ success: false, message: 'Comment not found' });
+    }
+    const cur = holder.comments[0];
+    const hasLiked = Array.isArray(cur.likedBy) && cur.likedBy.includes(voterId);
+    const hasDisliked = Array.isArray(cur.dislikedBy) && cur.dislikedBy.includes(voterId);
+
+    let inc = {};
+    const update = { $set: {}, $inc: {}, $addToSet: {}, $pull: {} };
+
+    switch (action) {
+      case 'like':
+        if (!hasLiked) {
+          update.$addToSet['comments.$.likedBy'] = voterId;
+          update.$inc['comments.$.likeCount'] = 1;
+        }
+        break;
+      case 'unlike':
+        if (hasLiked) {
+          update.$pull['comments.$.likedBy'] = voterId;
+          update.$inc['comments.$.likeCount'] = -1;
+        }
+        break;
+      case 'dislike':
+        if (!hasDisliked) {
+          update.$addToSet['comments.$.dislikedBy'] = voterId;
+          update.$inc['comments.$.dislikeCount'] = 1;
+        }
+        break;
+      case 'undislike':
+        if (hasDisliked) {
+          update.$pull['comments.$.dislikedBy'] = voterId;
+          update.$inc['comments.$.dislikeCount'] = -1;
+        }
+        break;
+      case 'switchToLike':
+        if (hasDisliked && !hasLiked) {
+          update.$pull['comments.$.dislikedBy'] = voterId;
+          update.$addToSet['comments.$.likedBy'] = voterId;
+          update.$inc['comments.$.likeCount'] = 1;
+          update.$inc['comments.$.dislikeCount'] = -1;
+        } else if (!hasLiked) {
+          update.$addToSet['comments.$.likedBy'] = voterId;
+          update.$inc['comments.$.likeCount'] = 1;
+        }
+        break;
+      case 'switchToDislike':
+        if (hasLiked && !hasDisliked) {
+          update.$pull['comments.$.likedBy'] = voterId;
+          update.$addToSet['comments.$.dislikedBy'] = voterId;
+          update.$inc['comments.$.likeCount'] = -1;
+          update.$inc['comments.$.dislikeCount'] = 1;
+        } else if (!hasDisliked) {
+          update.$addToSet['comments.$.dislikedBy'] = voterId;
+          update.$inc['comments.$.dislikeCount'] = 1;
+        }
+        break;
+      default:
+        return res.status(400).json({ success: false, message: 'Invalid action' });
+    }
+
+    // Clean empty operators to avoid Mongo errors
+    Object.keys(update).forEach(op => { if (Object.keys(update[op]).length === 0) delete update[op]; });
+
+    // If no actual change, return current counts
+    if (Object.keys(update).length === 0) {
+      return res.json({ success: true, data: { likeCount: cur.likeCount || 0, dislikeCount: cur.dislikeCount || 0 } });
+    }
+
+    const updated = await Blog.findOneAndUpdate({ _id: blogId, 'comments._id': commentId }, update, { new: true, projection: { comments: { $elemMatch: { _id: commentId } } } });
+    const c = updated.comments[0];
+    return res.json({ success: true, data: { likeCount: c.likeCount || 0, dislikeCount: c.dislikeCount || 0 } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Error updating comment vote', error: error.message });
   }
 };
 
@@ -603,13 +963,20 @@ const addCommentById = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid email address' });
     }
 
+    // Build new comment
     const newComment = {
+      _id: new mongoose.Types.ObjectId(),
       name: String(name).trim(),
       email: String(email).trim().toLowerCase(),
       comment: String(comment).trim(),
       approved: true,
       createdAt: new Date()
     };
+
+    // If avatar uploaded, set path
+    if (req.file && req.file.filename) {
+      newComment.avatar = `/uploads/comment-avatars/${req.file.filename}`;
+    }
 
     const blog = await Blog.findByIdAndUpdate(
       id,
@@ -799,6 +1166,10 @@ module.exports = {
   getBlogStats,
   fixPlaceholderImages,
   upload,
+  commentAvatarUpload,
   getCommentsBySlug,
-  addCommentById
+  addCommentById,
+  voteOnComment,
+  likeComment,
+  testLikeComment
 };

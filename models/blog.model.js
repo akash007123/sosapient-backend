@@ -94,6 +94,11 @@ const blogSchema = new mongoose.Schema({
       name: { type: String, required: true, trim: true, maxlength: 100 },
       email: { type: String, required: true, trim: true, lowercase: true },
       comment: { type: String, required: true, maxlength: 2000 },
+      avatar: { type: String },
+      likeCount: { type: Number, default: 0 },
+      dislikeCount: { type: Number, default: 0 },
+      likedBy: [{ type: String }],
+      dislikedBy: [{ type: String }],
       approved: { type: Boolean, default: true },
       createdAt: { type: Date, default: Date.now, immutable: true }
     }

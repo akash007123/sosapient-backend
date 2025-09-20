@@ -41,9 +41,11 @@ app.use((req, res, next) => {
 const fs = require('fs');
 const uploadsDir = path.join(__dirname, 'uploads');
 const blogImagesDir = path.join(uploadsDir, 'blog-images');
+const commentAvatarsDir = path.join(uploadsDir, 'comment-avatars');
 try {
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
   if (!fs.existsSync(blogImagesDir)) fs.mkdirSync(blogImagesDir);
+  if (!fs.existsSync(commentAvatarsDir)) fs.mkdirSync(commentAvatarsDir);
 } catch (e) {
   console.warn('Warning: could not ensure uploads directories exist:', e.message);
 }

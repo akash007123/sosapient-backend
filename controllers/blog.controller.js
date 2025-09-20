@@ -41,8 +41,10 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-    fieldSize: 10 * 1024 * 1024 // 10MB limit for field values
+    fileSize: 10 * 1024 * 1024, // Increased from 5MB to 10MB for blog images
+    fieldSize: 50 * 1024 * 1024, // Increased from 10MB to 50MB for very long blog content
+    fields: 20, // Increased number of allowed fields
+    parts: 50 // Increased number of allowed parts
   },
   fileFilter: function (req, file, cb) {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
@@ -521,11 +523,34 @@ const createBlog = async (req, res) => {
       sections = []
     } = req.body;
     
-    // Validate required fields
+    // Enhanced validation for long content
     if (!title || !excerpt || !content) {
       return res.status(400).json({
         success: false,
         message: 'Title, excerpt, and content are required'
+      });
+    }
+    
+    // Validate field lengths with new limits
+    if (title.length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title cannot exceed 500 characters'
+      });
+    }
+    
+    if (excerpt.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Excerpt cannot exceed 1000 characters'
+      });
+    }
+    
+    // Content length check (reasonable limit to prevent memory issues)
+    if (content.length > 10000000) { // 10MB text limit
+      return res.status(400).json({
+        success: false,
+        message: 'Content is too large. Please reduce the content size.'
       });
     }
     

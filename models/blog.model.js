@@ -5,7 +5,7 @@ const blogSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    maxlength: 200
+    maxlength: 500 // Increased from 200 to 500 characters
   },
   slug: {
     type: String,
@@ -16,7 +16,7 @@ const blogSchema = new mongoose.Schema({
   excerpt: {
     type: String,
     required: true,
-    maxlength: 300
+    maxlength: 1000 // Increased from 300 to 1000 characters
   },
   content: {
     type: String,
@@ -93,7 +93,7 @@ const blogSchema = new mongoose.Schema({
     {
       name: { type: String, required: true, trim: true, maxlength: 100 },
       email: { type: String, required: true, trim: true, lowercase: true },
-      comment: { type: String, required: true, maxlength: 2000 },
+      comment: { type: String, required: true, maxlength: 5000 }, // Increased from 2000 to 5000 characters
       avatar: { type: String },
       likeCount: { type: Number, default: 0 },
       dislikeCount: { type: Number, default: 0 },

@@ -23,9 +23,9 @@ app.use(cors({
   credentials: true
 }));
 
-// Body parser middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parser middleware with increased limits for long blog content
+app.use(express.json({ limit: '50mb' })); // Increased from default 100kb to 50MB
+app.use(express.urlencoded({ extended: true, limit: '50mb' })); // Increased limit for URL-encoded data
 
 // Request logging middleware (after body parsing to log body content)
 app.use((req, res, next) => {
